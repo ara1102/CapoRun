@@ -261,7 +261,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         switch safeLane {
         case 0: correctChords = ["C"]
         case 1: correctChords = ["D"]
-        case 2: correctChords = ["Am", "A"]
+        case 2: correctChords = ["Am"]
         case 3: correctChords = ["G"]
         default: return
         }

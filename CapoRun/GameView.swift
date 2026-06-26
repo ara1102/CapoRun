@@ -2,7 +2,8 @@ import SwiftUI
 import SpriteKit
 
 struct GameView: View {
-    @StateObject private var audioDetector = AudioDetector()
+    // @StateObject private var audioDetector = AudioDetector()
+    @StateObject private var audioDetector = ChromaAudioDetector()
     @State private var scene: GameScene = {
         let screenSize: CGSize
         if let windowScene = UIApplication.shared.connectedScenes.first(where: { $0.activationState == .foregroundActive }) as? UIWindowScene {

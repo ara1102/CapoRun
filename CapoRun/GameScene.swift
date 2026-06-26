@@ -20,14 +20,33 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     private var safeLaneForStuckRow: Int? = nil
     
     private let numLanes = 4
-    private var laneWidth: CGFloat {
-        return size.width / CGFloat(numLanes)
+    
+    // 3D Perspective Math
+    private var horizonY: CGFloat { size.height * 0.65 }
+    private var playerY: CGFloat { size.height * 0.15 }
+    private let cameraHeight: CGFloat = 10.0
+    private let startZ: CGFloat = 100.0
+    private let endZ: CGFloat = -15.0
+    private let obstacleDuration: TimeInterval = 3.0
+    
+    private var baseLaneWidth: CGFloat {
+        (size.width * 0.8) / CGFloat(numLanes)
+    }
+    
+    private func logicalX(for lane: Int) -> CGFloat {
+        return (CGFloat(lane) - 1.5) * baseLaneWidth
+    }
+    
+    private func perspectiveScale(z: CGFloat) -> CGFloat {
+        return cameraHeight / (cameraHeight + z)
+    }
+    
+    private func screenY(scale: CGFloat) -> CGFloat {
+        return horizonY - (horizonY - playerY) * scale
     }
     
     // Constants
-    private let playerYPositionMultiplier: CGFloat = 0.15
-    private let obstacleSpawnRate: TimeInterval = 2.0
-    private let obstacleDuration: TimeInterval = 3.0
+    private let obstacleSpawnRate: TimeInterval = 1.5
     
     // Physics Categories
     private let playerCategory: UInt32 = 0x1 << 0
@@ -35,7 +54,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     private let scoreCategory: UInt32 = 0x1 << 2
     
     override func didMove(to view: SKView) {
-        backgroundColor = .darkGray
+        backgroundColor = UIColor(red: 0.04, green: 0.02, blue: 0.1, alpha: 1.0)
         physicsWorld.gravity = .zero
         physicsWorld.contactDelegate = self
         
@@ -46,22 +65,73 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     }
     
     private func setupLanes() {
-        // Draw lane dividers for visual aid
-        for i in 1..<numLanes {
-            let x = CGFloat(i) * laneWidth
-            let divider = SKSpriteNode(color: .lightGray, size: CGSize(width: 2, height: size.height))
-            divider.position = CGPoint(x: x, y: size.height / 2)
-            divider.zPosition = -1
-            divider.alpha = 0.5
-            addChild(divider)
+        let centerX = size.width / 2
+        
+        // Synthwave Sun
+        let sun = SKShapeNode(circleOfRadius: size.width * 0.25)
+        sun.fillColor = UIColor(red: 1.0, green: 0.2, blue: 0.5, alpha: 1.0)
+        sun.strokeColor = .clear
+        sun.position = CGPoint(x: centerX, y: horizonY)
+        sun.zPosition = -5
+        
+        // Sun glow
+        let glow = SKEffectNode()
+        glow.shouldEnableEffects = true
+        let filter = CIFilter(name: "CIGaussianBlur")!
+        filter.setValue(30.0, forKey: "inputRadius")
+        glow.filter = filter
+        let sunCopy = sun.copy() as! SKShapeNode
+        glow.addChild(sunCopy)
+        glow.zPosition = -6
+        addChild(glow)
+        addChild(sun)
+        
+        // Horizon line glow
+        let horizonLine = SKShapeNode(rectOf: CGSize(width: size.width * 2, height: 4))
+        horizonLine.fillColor = UIColor(red: 0.0, green: 1.0, blue: 1.0, alpha: 1.0)
+        horizonLine.strokeColor = .clear
+        horizonLine.position = CGPoint(x: centerX, y: horizonY)
+        horizonLine.zPosition = -4
+        
+        let horizonGlow = SKEffectNode()
+        horizonGlow.shouldEnableEffects = true
+        horizonGlow.filter = CIFilter(name: "CIGaussianBlur", parameters: ["inputRadius": 10.0])
+        horizonGlow.addChild(horizonLine.copy() as! SKShapeNode)
+        horizonGlow.zPosition = -5
+        addChild(horizonGlow)
+        addChild(horizonLine)
+        
+        // Ground Grid Lines
+        let groundScale = horizonY / (horizonY - playerY)
+        
+        for i in 0...numLanes {
+            let logicX = (CGFloat(i) - 2.0) * baseLaneWidth
+            let bottomX = centerX + logicX * groundScale
+            
+            let path = CGMutablePath()
+            path.move(to: CGPoint(x: centerX, y: horizonY))
+            path.addLine(to: CGPoint(x: bottomX, y: 0))
+            
+            let line = SKShapeNode(path: path)
+            line.strokeColor = UIColor(red: 0.8, green: 0.0, blue: 0.8, alpha: 0.6)
+            line.lineWidth = 3.0
+            line.zPosition = -3
+            addChild(line)
         }
     }
     
     private func setupPlayer() {
-        // Dummy player is a blue square
-        player = SKSpriteNode(color: .systemBlue, size: CGSize(width: laneWidth * 0.6, height: laneWidth * 0.6))
-        player.position = positionFor(lane: currentLane, y: size.height * playerYPositionMultiplier)
-        player.zPosition = 10
+        let playerSize = CGSize(width: baseLaneWidth * 0.6, height: baseLaneWidth * 0.6)
+        player = SKSpriteNode(color: UIColor(red: 0.0, green: 1.0, blue: 1.0, alpha: 0.9), size: playerSize)
+        
+        let borderPath = CGPath(rect: CGRect(x: -playerSize.width/2, y: -playerSize.height/2, width: playerSize.width, height: playerSize.height), transform: nil)
+        let border = SKShapeNode(path: borderPath)
+        border.strokeColor = .white
+        border.lineWidth = 3.0
+        player.addChild(border)
+        
+        player.position = CGPoint(x: size.width / 2 + logicalX(for: currentLane), y: playerY)
+        player.zPosition = 110
         
         player.physicsBody = SKPhysicsBody(rectangleOf: player.size)
         player.physicsBody?.isDynamic = true
@@ -74,11 +144,11 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     
     private func setupHUD() {
         scoreLabel = SKLabelNode(fontNamed: "AvenirNext-Bold")
-        scoreLabel.fontSize = 24
+        scoreLabel.fontSize = 28
         scoreLabel.fontColor = .white
-        scoreLabel.position = CGPoint(x: size.width / 2, y: size.height - 50)
+        scoreLabel.position = CGPoint(x: size.width / 2, y: size.height - 60)
         scoreLabel.text = "Score: 0"
-        scoreLabel.zPosition = 100
+        scoreLabel.zPosition = 1000
         addChild(scoreLabel)
     }
     
@@ -94,18 +164,28 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     
     private func spawnObstacle() {
         let safeLane = Int.random(in: 0..<numLanes)
-        let obstacleHeight: CGFloat = 40.0
+        let obstacleLogicalHeight: CGFloat = baseLaneWidth * 0.5
         
         let rowNode = SKNode()
         rowNode.name = "obstacleRow"
         rowNode.userData = ["safeLane": safeLane]
-        rowNode.position = CGPoint(x: 0, y: size.height + obstacleHeight)
+        
+        let initialScale = perspectiveScale(z: startZ)
+        rowNode.position = CGPoint(x: size.width / 2, y: screenY(scale: initialScale))
+        rowNode.setScale(initialScale)
         
         for i in 0..<numLanes {
+            let blockX = logicalX(for: i)
+            
             if i == safeLane {
-                // Score trigger node in the safe lane
-                let scoreNode = SKSpriteNode(color: .clear, size: CGSize(width: laneWidth, height: obstacleHeight))
-                scoreNode.position = CGPoint(x: (CGFloat(i) + 0.5) * laneWidth, y: 0)
+                let scoreNode = SKSpriteNode(color: .clear, size: CGSize(width: baseLaneWidth * 0.9, height: obstacleLogicalHeight))
+                scoreNode.position = CGPoint(x: blockX, y: 0)
+                
+                let safePath = CGPath(rect: CGRect(x: -baseLaneWidth*0.45, y: -obstacleLogicalHeight/2, width: baseLaneWidth*0.9, height: obstacleLogicalHeight), transform: nil)
+                let safeOutline = SKShapeNode(path: safePath)
+                safeOutline.strokeColor = UIColor(red: 0.0, green: 1.0, blue: 0.5, alpha: 0.6)
+                safeOutline.lineWidth = 5.0
+                scoreNode.addChild(safeOutline)
                 
                 scoreNode.physicsBody = SKPhysicsBody(rectangleOf: scoreNode.size)
                 scoreNode.physicsBody?.isDynamic = false
@@ -115,9 +195,14 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
                 
                 rowNode.addChild(scoreNode)
             } else {
-                // Block node
-                let blockNode = SKSpriteNode(color: .systemYellow, size: CGSize(width: laneWidth, height: obstacleHeight))
-                blockNode.position = CGPoint(x: (CGFloat(i) + 0.5) * laneWidth, y: 0)
+                let blockNode = SKSpriteNode(color: UIColor(red: 1.0, green: 0.0, blue: 0.8, alpha: 0.8), size: CGSize(width: baseLaneWidth * 0.95, height: obstacleLogicalHeight))
+                blockNode.position = CGPoint(x: blockX, y: 0)
+                
+                let borderPath = CGPath(rect: CGRect(x: -baseLaneWidth*0.475, y: -obstacleLogicalHeight/2, width: baseLaneWidth*0.95, height: obstacleLogicalHeight), transform: nil)
+                let border = SKShapeNode(path: borderPath)
+                border.strokeColor = UIColor(red: 1.0, green: 0.5, blue: 1.0, alpha: 1.0)
+                border.lineWidth = 3.0
+                blockNode.addChild(border)
                 
                 blockNode.physicsBody = SKPhysicsBody(rectangleOf: blockNode.size)
                 blockNode.physicsBody?.isDynamic = false
@@ -131,10 +216,20 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         
         addChild(rowNode)
         
-        // Move obstacle down
-        let moveDown = SKAction.moveTo(y: -obstacleHeight, duration: obstacleDuration)
+        // 3D Perspective Animation
+        let move3D = SKAction.customAction(withDuration: obstacleDuration) { [weak self] node, elapsedTime in
+            guard let self = self else { return }
+            let fraction = elapsedTime / CGFloat(self.obstacleDuration)
+            let currentZ = self.startZ + (self.endZ - self.startZ) * fraction
+            
+            let scale = self.perspectiveScale(z: currentZ)
+            node.setScale(scale)
+            node.position.y = self.screenY(scale: scale)
+            node.zPosition = 100 - currentZ
+        }
+        
         let remove = SKAction.removeFromParent()
-        rowNode.run(SKAction.sequence([moveDown, remove]))
+        rowNode.run(SKAction.sequence([move3D, remove]))
     }
     
     // MARK: - Input Handling
@@ -146,12 +241,11 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         
         var nearestRow: SKNode? = nil
         var minDistance: CGFloat = .greatestFiniteMagnitude
-        let playerY = size.height * playerYPositionMultiplier
         
         enumerateChildNodes(withName: "obstacleRow") { node, _ in
-            let distance = node.position.y - playerY
-            // Only consider obstacles that haven't fully passed the player
-            if distance > -20 && distance < minDistance {
+            let distance = node.position.y - self.playerY
+            // Consider obstacles within a reasonable range (allows them to slightly pass the player)
+            if distance > -50 && distance < minDistance {
                 minDistance = distance
                 nearestRow = node
             }
@@ -163,7 +257,6 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     func changeLane(to chord: String) {
         guard let safeLane = activeSafeLane else { return }
         
-        // Determine the correct chord for the safe lane
         var correctChords: [String] = []
         switch safeLane {
         case 0: correctChords = ["C"]
@@ -173,19 +266,17 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         default: return
         }
         
-        // Only move if the detected chord is the correct one for the upcoming obstacle
         if correctChords.contains(chord) {
             if currentLane != safeLane {
                 currentLane = safeLane
-                let targetX = (CGFloat(safeLane) + 0.5) * laneWidth
+                let targetX = size.width / 2 + logicalX(for: safeLane)
                 
                 isSliding = true
-                let moveAction = SKAction.moveTo(x: targetX, duration: 0.15) // Slightly increased duration for smoother slide
+                let moveAction = SKAction.moveTo(x: targetX, duration: 0.15)
                 let finishSliding = SKAction.run { [weak self] in
                     guard let self = self else { return }
                     self.isSliding = false
                     
-                    // If we were frozen from a collision, resume AFTER we finish sliding!
                     if self.isWaitingForCorrectAnswer {
                         self.resumeFromCollision()
                     }
@@ -195,18 +286,12 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         }
     }
     
-    private func positionFor(lane: Int, y: CGFloat) -> CGPoint {
-        let x = (CGFloat(lane) + 0.5) * laneWidth
-        return CGPoint(x: x, y: y)
-    }
-    
     // MARK: - Collision Handling
     
     func didBegin(_ contact: SKPhysicsContact) {
         let collision = contact.bodyA.categoryBitMask | contact.bodyB.categoryBitMask
         
         if collision == (playerCategory | obstacleCategory) {
-            // Hit an obstacle, stop and wait
             if !isWaitingForCorrectAnswer && !isSliding {
                 let obstacleNode = contact.bodyA.categoryBitMask == obstacleCategory ? contact.bodyA.node : contact.bodyB.node
                 if let rowNode = obstacleNode?.parent {
@@ -214,11 +299,8 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
                 }
             }
         } else if collision == (playerCategory | scoreCategory) {
-            // Passed through a safe gap
-            // Ensure we only score once per row
             if let nodeA = contact.bodyA.node, let nodeB = contact.bodyB.node {
                 let scoreNode = contact.bodyA.categoryBitMask == scoreCategory ? nodeA : nodeB
-                // Remove the score node so it doesn't trigger again
                 scoreNode.removeFromParent()
                 score += 1
             }
@@ -230,7 +312,6 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         stuckRowNode = rowNode
         safeLaneForStuckRow = rowNode.userData?["safeLane"] as? Int
         
-        // Pause all obstacle rows
         enumerateChildNodes(withName: "obstacleRow") { node, _ in
             node.isPaused = true
         }
@@ -241,7 +322,6 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         stuckRowNode = nil
         safeLaneForStuckRow = nil
         
-        // Unpause all obstacle rows
         enumerateChildNodes(withName: "obstacleRow") { node, _ in
             node.isPaused = false
         }
@@ -259,21 +339,24 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         }
         
         player.removeAllActions()
-        player.position = positionFor(lane: currentLane, y: size.height * playerYPositionMultiplier)
+        player.position = CGPoint(x: size.width / 2 + logicalX(for: currentLane), y: playerY)
+        
+        isPaused = false
+        if let gameOverLabel = childNode(withName: "gameOverLabel") {
+            gameOverLabel.removeFromParent()
+        }
     }
     
     private func gameOver() {
-        // Simple game over: pause and show label
         isPaused = true
         
         let gameOverLabel = SKLabelNode(fontNamed: "AvenirNext-Bold")
+        gameOverLabel.name = "gameOverLabel"
         gameOverLabel.fontSize = 40
         gameOverLabel.fontColor = .systemRed
         gameOverLabel.text = "Game Over!"
         gameOverLabel.position = CGPoint(x: size.width / 2, y: size.height / 2)
-        gameOverLabel.zPosition = 100
+        gameOverLabel.zPosition = 1000
         addChild(gameOverLabel)
-        
-        // Tap to restart could be added
     }
 }

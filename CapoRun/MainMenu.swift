@@ -15,7 +15,7 @@ struct MainMenu: View {
                 .scaledToFill()
                 .ignoresSafeArea()
             
-            Color.black.opacity(0.35)
+            Color.black.opacity(0.5)
                 .ignoresSafeArea()
             
             VStack(spacing: 32) {

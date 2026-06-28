@@ -2,8 +2,13 @@ import SwiftUI
 import SpriteKit
 
 struct GameView: View {
-    // @StateObject private var audioDetector = AudioDetector()
+    var initialUsingGuitar: Bool = true
     @StateObject private var audioDetector = ChromaAudioDetector()
+    @State private var isUsingGuitar: Bool = true
+    @State private var isPaused: Bool = false
+    
+    var onQuit: () -> Void = {}
+    
     @State private var scene: GameScene = {
         let screenSize: CGSize
         if let windowScene = UIApplication.shared.connectedScenes.first(where: { $0.activationState == .foregroundActive }) as? UIWindowScene {
@@ -18,52 +23,175 @@ struct GameView: View {
         return scene
     }()
     
+    private func color(for chord: String) -> Color {
+        switch chord {
+        case "C": return Color(red: 255/255, green: 65/255, blue: 77/255)       // Red/Coral (#FF414D)
+        case "D": return Color(red: 255/255, green: 174/255, blue: 25/255)      // Orange/Gold (#FFAE19)
+        case "Am": return Color(red: 155/255, green: 48/255, blue: 255/255)     // Purple/Violet (#9B30FF)
+        case "G": return Color(red: 38/255, green: 196/255, blue: 185/255)      // Teal/Cyan (#26C4B9)
+        default: return .purple
+        }
+    }
+    
+    private func textColor(for chord: String) -> Color {
+        switch chord {
+        case "C", "Am": return .white
+        case "D", "G": return .black
+        default: return .white
+        }
+    }
+    
     var body: some View {
         ZStack(alignment: .top) {
             SpriteView(scene: scene)
                 .ignoresSafeArea()
             
             VStack {
-                HStack {
-                    Text("Detected Chord: \(audioDetector.detectedChord)")
-                        .font(.headline)
-                        .padding()
-                        .background(Color.black.opacity(0.7))
-                        .foregroundColor(.white)
-                        .cornerRadius(10)
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Toggle(isOn: $isUsingGuitar) {
+                            Image(systemName: "guitars")
+                                .font(.title2)
+                                .foregroundColor(.white)
+                        }
+                        .toggleStyle(SwitchToggleStyle(tint: .green))
+                        .padding(8)
+                        .padding(.horizontal, 4)
+                        .background(Color.black.opacity(0.8))
+                        .cornerRadius(20)
+                        .fixedSize()
+                        .onChange(of: isUsingGuitar) { _, newValue in
+                            if newValue {
+                                audioDetector.startListening()
+                            } else {
+                                audioDetector.stopListening()
+                            }
+                        }
+                        
+                        if isUsingGuitar {
+                            Text("Chord: \(audioDetector.detectedChord)")
+                                .font(.headline)
+                                .padding(8)
+                                .background(Color.black.opacity(0.8))
+                                .foregroundColor(.white)
+                                .cornerRadius(10)
+                        }
+                    }
+                    
                     Spacer()
+                    
                     Button(action: {
-                        scene.resetGame()
+                        isPaused = true
+                        scene.isPaused = true
                     }) {
-                        Image(systemName: "arrow.clockwise")
+                        Image(systemName: "pause.fill")
                             .font(.title2)
-                            .padding()
-                            .background(Color.black.opacity(0.7))
+                            .padding(14)
+                            .background(Color.black.opacity(0.8))
                             .foregroundColor(.white)
                             .clipShape(Circle())
                     }
                 }
-                .padding()
+                .padding(.horizontal, 20)
+                .padding(.top, 50)
                 
                 Spacer()
                 
-                // Temporary buttons for testing without real guitar
-                HStack(spacing: 20) {
-                    Button("C") { scene.changeLane(to: "C") }
-                    Button("D") { scene.changeLane(to: "D") }
-                    Button("Am") { scene.changeLane(to: "Am") }
-                    Button("G") { scene.changeLane(to: "G") }
+                // Manual Buttons
+                VStack(spacing: 12) {
+                    
+                    HStack(spacing: 40) {
+                        ForEach(["C", "D", "Am", "G"], id: \.self) { chord in
+                            Button(action: {
+                                if !isUsingGuitar {
+                                    scene.changeLane(to: chord)
+                                }
+                            }) {
+                                Text(chord)
+                                    .font(.headline)
+                                    .bold()
+                                    .frame(width: 40, height: 32)
+                                    .foregroundColor(isUsingGuitar ? color(for: chord) : textColor(for: chord))
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(isUsingGuitar ? Color.black.opacity(0.8) : color(for: chord))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .stroke(color(for: chord), lineWidth: isUsingGuitar ? 2 : 0)
+                            )
+                        }
+                    }
+                    .padding(.bottom, 8)
                 }
-                .padding()
-                .buttonStyle(.borderedProminent)
+            }
+            
+            if isPaused {
+                Color.black.opacity(0.7)
+                    .ignoresSafeArea()
+                
+                VStack(spacing: 20) {
+                    Text("PAUSED")
+                        .font(.system(size: 40, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                        .padding(.bottom, 20)
+                    
+                    Button(action: {
+                        isPaused = false
+                        scene.isPaused = false
+                    }) {
+                        Text("Resume")
+                            .font(.title2).bold()
+                            .padding()
+                            .frame(width: 200)
+                            .background(Color.blue)
+                            .foregroundColor(.white)
+                            .cornerRadius(10)
+                    }
+                    
+                    Button(action: {
+                        isPaused = false
+                        scene.resetGame()
+                    }) {
+                        Text("Retry")
+                            .font(.title2).bold()
+                            .padding()
+                            .frame(width: 200)
+                            .background(Color.orange)
+                            .foregroundColor(.white)
+                            .cornerRadius(10)
+                    }
+                    
+                    Button(action: {
+                        isPaused = false
+                        audioDetector.stopListening()
+                        onQuit()
+                    }) {
+                        Text("Main Menu")
+                            .font(.title2).bold()
+                            .padding()
+                            .frame(width: 200)
+                            .background(Color.red)
+                            .foregroundColor(.white)
+                            .cornerRadius(10)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .onAppear {
-            audioDetector.startListening()
+            isUsingGuitar = initialUsingGuitar
+            scene.onGameEnd = {
+                audioDetector.stopListening()
+                onQuit()
+            }
+            if isUsingGuitar {
+                audioDetector.startListening()
+            }
         }
         .onChange(of: audioDetector.detectedChord) { _, newChord in
-            // When the audio detector detects a new chord, tell the game scene to move the player
-            scene.changeLane(to: newChord)
+            if isUsingGuitar {
+                scene.changeLane(to: newChord)
+            }
         }
     }
 }

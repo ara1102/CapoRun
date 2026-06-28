@@ -83,6 +83,17 @@ class ChromaAudioDetector: NSObject, ObservableObject {
         }
     }
     
+    func stopListening() {
+        if audioEngine.isRunning {
+            audioEngine.stop()
+            audioEngine.inputNode.removeTap(onBus: 0)
+            DispatchQueue.main.async {
+                self.detectedChord = "Listening..."
+                self.triggeredDirection = nil
+            }
+        }
+    }
+    
     private func processAudioBuffer(channelData: UnsafeMutablePointer<Float>, length: Int, sampleRate: Double) {
         // Calculate root mean square (RMS) volume to gate noise/silence
         var rms: Float = 0

@@ -20,45 +20,12 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         }
     }
     
-    private var lives: Int = 10 {
-        didSet {
-            updateScoreLabel()
-            updateHealthBar()
-        }
-    }
-    
-    private let maxLives: Int = 10
-    private let healthBarHeight: CGFloat = 150
-    
     private var scoreBackground: SKShapeNode!
     private var healthBarBackground: SKShapeNode!
     private var healthBarFill: SKShapeNode!
     
     private func updateScoreLabel() {
         scoreLabel.text = "Score: \(score)/\(scoreGoal)"
-    }
-    
-    private func updateHealthBar() {
-        if healthBarFill == nil { return }
-        
-        let fillRatio = CGFloat(lives) / CGFloat(maxLives)
-        let newHeight = healthBarHeight * fillRatio
-        
-        if lives <= 0 {
-            healthBarFill.isHidden = true
-        } else {
-            healthBarFill.isHidden = false
-            let fillRect = CGRect(x: -10, y: 0, width: 20, height: newHeight)
-            healthBarFill.path = CGPath(roundedRect: fillRect, cornerWidth: 10, cornerHeight: 10, transform: nil)
-            
-            if lives > 6 {
-                healthBarFill.fillColor = .systemGreen
-            } else if lives > 3 {
-                healthBarFill.fillColor = .systemOrange
-            } else {
-                healthBarFill.fillColor = .systemRed
-            }
-        }
     }
     
     private var isWaitingForCorrectAnswer = false
@@ -117,7 +84,9 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         setupLanes()
         setupPlayer()
         setupHUD()
-        
+    }
+    
+    func startGame() {
         startCountdown()
     }
     
@@ -134,7 +103,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         addChild(background)
         
         // 2. 4-Lane Road Sprite
-        let road = SKSpriteNode(imageNamed: "Road4Lanes 1")
+        let road = SKSpriteNode(imageNamed: "Road4Lanes")
         road.anchorPoint = CGPoint(x: 0.5, y: 0) // Anchor at bottom-center
         road.position = CGPoint(x: centerX, y: 0)
         road.size = CGSize(width: size.width, height: horizonY)
@@ -214,45 +183,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         scoreLabel.zPosition = 1000
         addChild(scoreLabel)
         
-        // Vertical Health Bar
-        let barWidth: CGFloat = 20
-        healthBarBackground = SKShapeNode(rectOf: CGSize(width: barWidth, height: healthBarHeight), cornerRadius: barWidth / 2)
-        healthBarBackground.fillColor = UIColor.black.withAlphaComponent(0.6)
-        healthBarBackground.strokeColor = UIColor.white
-        healthBarBackground.lineWidth = 2
-        healthBarBackground.position = CGPoint(x: 30, y: size.height / 2)
-        healthBarBackground.zPosition = 999
-        addChild(healthBarBackground)
-        
-        let fillRect = CGRect(x: -barWidth/2, y: 0, width: barWidth, height: healthBarHeight)
-        healthBarFill = SKShapeNode(rect: fillRect, cornerRadius: barWidth / 2)
-        healthBarFill.fillColor = .systemGreen
-        healthBarFill.strokeColor = .clear
-        healthBarFill.position = CGPoint(x: 30, y: size.height / 2 - healthBarHeight / 2)
-        healthBarFill.zPosition = 1000
-        addChild(healthBarFill)
-        
-        if let heartImage = UIImage(systemName: "heart.fill") {
-            let heartTexture = SKTexture(image: heartImage)
-            let hpIcon = SKSpriteNode(texture: heartTexture)
-            hpIcon.size = CGSize(width: 20, height: 18)
-            hpIcon.color = .systemRed
-            hpIcon.colorBlendFactor = 1.0
-            hpIcon.position = CGPoint(x: 30, y: size.height / 2 + healthBarHeight / 2 + 15)
-            hpIcon.zPosition = 1000
-            addChild(hpIcon)
-        } else {
-            let hpLabel = SKLabelNode(fontNamed: "AvenirNext-Bold")
-            hpLabel.text = "HP"
-            hpLabel.fontSize = 18
-            hpLabel.fontColor = .white
-            hpLabel.position = CGPoint(x: 30, y: size.height / 2 + healthBarHeight / 2 + 10)
-            hpLabel.zPosition = 1000
-            addChild(hpLabel)
-        }
-        
         updateScoreLabel()
-        updateHealthBar()
     }
     
     private func startCountdown() {
@@ -515,35 +446,21 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     }
     
     private func handleCollision(with rowNode: SKNode, obstacleNode: SKNode) {
-        if lives > 0 {
-            lives -= 1
-            
-            // Blink player to indicate damage
-            let colorize = SKAction.colorize(with: .red, colorBlendFactor: 0.8, duration: 0.1)
-            let uncolorize = SKAction.colorize(withColorBlendFactor: 0.0, duration: 0.1)
-            let blink = SKAction.sequence([colorize, uncolorize, colorize, uncolorize])
-            player.run(blink)
-            
-            // Destroy the barrier so player can pass
-            obstacleNode.removeFromParent()
-            
-            let floatingLabel = SKLabelNode(fontNamed: "AvenirNext-Bold")
-            floatingLabel.text = "Oops! (\(lives) lives left)"
-            floatingLabel.fontSize = 24
-            floatingLabel.fontColor = .systemRed
-            floatingLabel.position = CGPoint(x: player.position.x, y: player.position.y + 60)
-            floatingLabel.zPosition = 1000
-            addChild(floatingLabel)
-            
-            let moveUp = SKAction.moveBy(x: 0, y: 50, duration: 1.0)
-            let fadeOut = SKAction.fadeOut(withDuration: 1.0)
-            let group = SKAction.group([moveUp, fadeOut])
-            let remove = SKAction.removeFromParent()
-            floatingLabel.run(SKAction.sequence([group, remove]))
-            
-        } else {
-            gameOver()
+        // Stop the scene elements and wait for correct answer
+        isWaitingForCorrectAnswer = true
+        stuckRowNode = rowNode
+        safeLaneForStuckRow = rowNode.userData?["safeLane"] as? Int
+        
+        // Pause all obstacle rows
+        enumerateChildNodes(withName: "obstacleRow") { node, _ in
+            node.isPaused = true
         }
+        
+        // Blink player to indicate hit
+        let colorize = SKAction.colorize(with: .red, colorBlendFactor: 0.8, duration: 0.1)
+        let uncolorize = SKAction.colorize(withColorBlendFactor: 0.0, duration: 0.1)
+        let blink = SKAction.sequence([colorize, uncolorize, colorize, uncolorize])
+        player.run(blink)
     }
     
     private func resumeFromCollision() {
@@ -558,7 +475,6 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     
     func resetGame() {
         score = 0
-        lives = 10
         currentLane = 0
         isWaitingForCorrectAnswer = false
         stuckRowNode = nil

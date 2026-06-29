@@ -8,6 +8,8 @@
 import SwiftUI
 
 struct MainMenu: View {
+    var onPlay: () -> Void = {}
+    
     var body: some View {
         ZStack {
             Image("MainMenuBackground")
@@ -26,7 +28,7 @@ struct MainMenu: View {
                 
                 VStack(spacing: 18) {
                     Button {
-                        //function
+                        onPlay()
                     } label: {
                         Image("PlayButton")
                             .resizable()

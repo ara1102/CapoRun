@@ -2,10 +2,10 @@ import SwiftUI
 import SpriteKit
 
 struct GameView: View {
-    var initialUsingGuitar: Bool = true
     @StateObject private var audioDetector = ChromaAudioDetector()
     @State private var isUsingGuitar: Bool = true
     @State private var isPaused: Bool = false
+    @State private var showInputSelection: Bool = true
     
     var onQuit: () -> Void = {}
     
@@ -125,7 +125,49 @@ struct GameView: View {
                 }
             }
             
-            if isPaused {
+            if showInputSelection {
+                Color.black.opacity(0.8)
+                    .ignoresSafeArea()
+                
+                VStack(spacing: 30) {
+                    Text("Select Input Mode")
+                        .font(.system(size: 40, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                        .padding(.bottom, 20)
+                    
+                    Button(action: {
+                        isUsingGuitar = true
+                        showInputSelection = false
+                        scene.isPaused = false
+                        scene.startGame()
+                        audioDetector.startListening()
+                    }) {
+                        Text("🎸 Guitar Mode")
+                            .font(.title2).bold()
+                            .padding()
+                            .frame(width: 250)
+                            .background(Color.green)
+                            .foregroundColor(.white)
+                            .cornerRadius(15)
+                    }
+                    
+                    Button(action: {
+                        isUsingGuitar = false
+                        showInputSelection = false
+                        scene.isPaused = false
+                        scene.startGame()
+                    }) {
+                        Text("👉 Manual Mode")
+                            .font(.title2).bold()
+                            .padding()
+                            .frame(width: 250)
+                            .background(Color.blue)
+                            .foregroundColor(.white)
+                            .cornerRadius(15)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if isPaused {
                 Color.black.opacity(0.7)
                     .ignoresSafeArea()
                 
@@ -179,13 +221,10 @@ struct GameView: View {
             }
         }
         .onAppear {
-            isUsingGuitar = initialUsingGuitar
+            scene.isPaused = true
             scene.onGameEnd = {
                 audioDetector.stopListening()
                 onQuit()
-            }
-            if isUsingGuitar {
-                audioDetector.startListening()
             }
         }
         .onChange(of: audioDetector.detectedChord) { _, newChord in

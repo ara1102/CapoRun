@@ -406,6 +406,16 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         }
     }
     
+    func playChordSound(chord: String) {
+        let soundName = "\(chord).wav"
+        
+        if Bundle.main.path(forResource: chord, ofType: "wav", inDirectory: "AudioAsset") != nil {
+            run(SKAction.playSoundFileNamed("AudioAsset/\(soundName)", waitForCompletion: false))
+        } else if Bundle.main.path(forResource: chord, ofType: "wav") != nil {
+            run(SKAction.playSoundFileNamed(soundName, waitForCompletion: false))
+        }
+    }
+    
     // MARK: - Collision Handling
     
     func didBegin(_ contact: SKPhysicsContact) {

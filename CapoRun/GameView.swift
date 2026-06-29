@@ -104,6 +104,7 @@ struct GameView: View {
                         ForEach(["C", "D", "Am", "G"], id: \.self) { chord in
                             Button(action: {
                                 if !isUsingGuitar {
+                                    scene.playChordSound(chord: chord)
                                     scene.changeLane(to: chord)
                                 }
                             }) {
